@@ -2,7 +2,7 @@
 
 # Klyn OS
 
-**A headless-first, evidence-driven runtime for autonomous software engineering**
+**A headless-first runtime for autonomous software engineering with evidence-gated execution**
 
 **INTENT → AUTHORIZATION → ISOLATED EXECUTION → VERIFICATION → EVIDENCE → STATE TRANSITION**
 
@@ -36,11 +36,11 @@
 
 ## 1. Purpose and operating principles
 
-Klyn OS is an autonomous software-engineering runtime. It turns engineering intent into a bounded execution plan, authorizes each operation, runs work inside an isolated environment, verifies the resulting evidence, and commits state only through an explicit, auditable transition.
+Klyn OS provides a runtime for autonomous software engineering. It converts an engineering request into a bounded execution plan, authorizes each operation, executes work in an isolated environment, validates the resulting evidence, and applies state changes through explicit, auditable transitions.
 
-Klyn OS is **headless-first**. External clients—CLI tools, IDE integrations, CI systems, and agent clients—connect through a controlled API/MCP boundary. The native runtime owns privileged execution. TypeScript services coordinate requests; they do not bypass native security controls.
+Klyn OS uses a **headless-first** model. Clients—including command-line tools, IDE integrations, CI systems, and agent applications—submit requests through controlled API and MCP interfaces. The native runtime is responsible for privileged execution. TypeScript services coordinate requests but MUST NOT bypass native enforcement.
 
-Klyn OS constrains every agent action to an explicit scope and records its authorization and execution evidence. An operation is attributable, revocable, reproducible where its inputs permit, and rejectable whenever required proof is absent or invalid.
+Every agent operation is bound to an explicit scope, and its authorization and execution evidence are recorded. Each operation is attributable and revocable. It is reproducible when all relevant inputs are available and immutable. The system MUST reject an operation when required evidence is absent or invalid.
 
 > **Project status and scope**
 >
@@ -53,7 +53,7 @@ This README specifies required architecture and release behavior. It is not, by 
 | Term | Exact meaning | Permitted claim |
 |---|---|---|
 | **MUST / MUST NOT** | Mandatory invariant | A release violating it is not qualified |
-| **SHOULD / SHOULD NOT** | Strong default | Deviation needs documented threat analysis and approved exception |
+| **SHOULD / SHOULD NOT** | Strong default | A deviation requires documented threat analysis and an approved exception |
 | **MAY** | Optional implementation choice | It must not weaken a mandatory invariant |
 | **REQUIRED** | Architecture or release process must provide the control | Describes the target contract, not implementation status |
 | **IMPLEMENTED** | Exact source revision contains enforcement code and relevant tests pass | May be claimed only with revision-specific evidence |
@@ -67,7 +67,7 @@ This README specifies required architecture and release behavior. It is not, by 
 >
 > A design description, TODO, configuration placeholder, successful compile, or skipped test does not establish implementation or qualification.
 
-Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. A security-sensitive `NOT_RUN` or `UNSUPPORTED` result is not a passing control.
+Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. For a security-sensitive control, `NOT_RUN` and `UNSUPPORTED` MUST NOT be interpreted as passing results.
 
 **Formal release predicates**
 
@@ -81,7 +81,7 @@ The release predicate is:
 
 > `QUALIFIED(R) ⇔ IMPLEMENTED(R) ∧ TestsPass(R) ∧ ProvenanceValid(A(R)) ∧ SignaturesValid(A(R)) ∧ PlatformControlsEnforced(R) ∧ EvidenceBound(S(R), A(R))`.
 >
-> Any applicable mandatory control reported as `FAIL`, `UNSUPPORTED`, or `NOT_RUN` makes `QUALIFIED(R)` false. A documented exception changes the approved policy scope; it does not convert a failed control into a passing result.
+> If any applicable mandatory control reports `FAIL`, `UNSUPPORTED`, or `NOT_RUN`, then `QUALIFIED(R)` is false. An approved exception changes the applicable policy scope; it does not change the result of a failed control.
 
 ### 1.2 System contract at a glance
 
@@ -105,7 +105,7 @@ The release predicate is:
 
 ### 2.1 Control flow
 
-The following is the normative request and execution path. Each numbered stage is a trust boundary; passing a request to the next stage does not imply that the next stage trusts the caller. Each stage MUST validate the evidence and authority relevant to its own responsibility; upstream validation MUST NOT be treated as a substitute for local enforcement.
+The sequence below defines the required request and execution path. Each numbered stage is an independent trust boundary. Acceptance by one stage does not establish trust at the next stage. Each stage MUST validate the authority and evidence relevant to its responsibility. Upstream validation MUST NOT replace local enforcement.
 
 **01 — External client**
 
@@ -160,7 +160,7 @@ The following is the normative request and execution path. Each numbered stage i
 
 **Evidence path — independent of control-flow result**
 
-The gateway, orchestrator, native runtime, verifier, and commit gate emit typed evidence events to the Klyn Evidence Ledger (KEL). Evidence recording MUST NOT grant authority, bypass the state machine, or expose plaintext credentials.
+The gateway, orchestrator, native runtime, verifier, and commit gate emit typed events to the Klyn Evidence Ledger (KEL). Evidence recording MUST NOT grant authority, bypass state-transition rules, or expose plaintext credentials.
 
 > **Trust-boundary rule**
 >
@@ -185,7 +185,7 @@ The gateway, orchestrator, native runtime, verifier, and commit gate emit typed 
 
 ### 2.3 Logical subsystem map
 
-These are ownership boundaries, not a claim that every subsystem is complete or production-qualified.
+These boundaries define subsystem responsibility. They do not assert that every subsystem is implemented or production-qualified.
 
 | Subsystem | Owns | Explicitly does not own |
 |---|---|---|
@@ -196,13 +196,13 @@ These are ownership boundaries, not a claim that every subsystem is complete or 
 | Execution engine | `klyn-runtime`, task scheduling, bounded tool invocation, deterministic transition processing | Silent policy relaxation |
 | Evidence layer | KEL, artifact digests, attestations, verification records, audit export | Plaintext credential storage |
 
-The native runtime is the enforcement boundary. A gateway or orchestration service may request an operation; it cannot manufacture proof that the native runtime enforced it. Protocol adapters and orchestration code SHOULD remain replaceable without weakening the local enforcement contract.
+The native runtime is the enforcement boundary. A gateway or orchestration service may request an operation, but it cannot attest that the native runtime enforced the request. Protocol adapters and orchestration services SHOULD remain replaceable without weakening local enforcement.
 
 ## 3. Execution contract
 
 ### 3.1 Intent is not authority
 
-Every request MUST be normalized into a typed operation containing:
+Every request MUST be normalized into a typed operation with the following fields:
 
 - **Identity:** authenticated principal and tenant.
 - **Target:** project, repository, and immutable revision.
@@ -215,7 +215,7 @@ Every request MUST be normalized into a typed operation containing:
 
 Free-form prompt text is untrusted input. It may describe intent, but it MUST NOT add permissions, change tenant identity, weaken policy, or authorize secret access.
 
-The authorization decision MUST be computed from authenticated identity, explicit policy, canonical resource identifiers, and the requested operation—not from claims contained in user-controlled text.
+The authorization decision MUST use the authenticated identity, explicit policy, canonical resource identifiers, and requested operation. Claims in user-controlled text MUST NOT affect that decision.
 
 > **Intent is data, not authority.**
 >
@@ -223,7 +223,7 @@ The authorization decision MUST be computed from authenticated identity, explici
 
 ### 3.2 Least-privilege capability tokens: OCap
 
-The object-capability contract (**OCap**) grants authority over a specific action and resource—not a broad user session.
+The object-capability contract (**OCap**) grants narrowly scoped authority over specified actions and resources. It does not grant a general user-session privilege.
 
 A capability MUST be cryptographically authenticated and bind, at minimum:
 
@@ -248,7 +248,7 @@ A token is necessary but not sufficient. The native runtime MUST independently v
 
 **Capability validity predicate**
 
-For principal `p`, action `a`, resource `r`, capability `c`, and evaluation time `t`, `ValidCapability(c, p, a, r, t)` is true only when all of the following hold:
+For principal `p`, action `a`, resource `r`, capability `c`, and evaluation time `t`, `ValidCapability(c, p, a, r, t)` holds if and only if every condition below is satisfied:
 
 - The capability signature and issuer trust chain verify.
 - The subject, tenant, audience, and workload identity match the authenticated execution context.
@@ -258,7 +258,13 @@ For principal `p`, action `a`, resource `r`, capability `c`, and evaluation time
 - The capability is within its validity interval and has not been revoked or consumed.
 - The capability's policy version and execution/lease binding match the current request.
 
-Authorization is conjunctive: a valid capability does not replace an allow decision from policy, and a policy allow decision does not replace a valid capability.
+Authorization requires both an affirmative policy decision and a valid capability. Neither condition is sufficient on its own.
+
+For principal `p`, action `a`, resource `r`, and time `t`:
+
+> `Authorized(p, a, r, t) ⇔ PolicyAllows(p, a, r, t) ∧ ValidCapability(c, p, a, r, t) ∧ LeaseCurrent(c, t)`.
+>
+> If any term is false or cannot be established, authorization MUST be denied.
 
 > **Capability invariant**
 >
@@ -266,7 +272,7 @@ Authorization is conjunctive: a valid capability does not replace an allow decis
 
 ### 3.3 Runtime lease and deterministic state transitions
 
-`RuntimeLeaseV1` is the bounded execution grant. It binds a worker to:
+`RuntimeLeaseV1` defines the execution lease. It binds one worker to a bounded execution context containing:
 
 - execution ID;
 - immutable input snapshot;
@@ -276,7 +282,7 @@ Authorization is conjunctive: a valid capability does not replace an allow decis
 - expiry;
 - fencing generation.
 
-The authoritative state machine is event-driven. State transitions are governed by this hierarchy:
+The authoritative state machine is event-driven. The lifecycle below defines the permitted transition hierarchy:
 
 1. **QUEUED — request admitted to the control plane**
    - **AUTHORIZED — policy decision allows the exact principal, operation, and resource.**
@@ -291,7 +297,7 @@ The authoritative state machine is event-driven. State transitions are governed 
        - **EXPIRED — lease expires before worker admission or completion.**
    - **REJECTED — policy denies the request; no worker is admitted.**
 
-Terminal states are `COMMITTED`, `REJECTED`, `FAILED`, `CANCELLED`, and `EXPIRED`. A terminal execution MUST NOT silently return to `RUNNING`. A new attempt receives a new execution or fencing generation and must pass authorization again.
+The terminal states are `COMMITTED`, `REJECTED`, `FAILED`, `CANCELLED`, and `EXPIRED`. A terminal execution MUST NOT transition to `RUNNING`. A retry MUST use a new execution identifier or fencing generation and MUST undergo authorization again.
 
 **Transition guarantees**
 
@@ -322,7 +328,7 @@ The commit safety conditions are conjunctive:
 >
 > `¬EvidenceValid(E) ∨ ¬LeaseCurrent(E) ∨ ¬FenceCurrent(E) ∨ ¬CASMatches(E) ⇒ ¬Commit(E)`.
 
-Klyn OS does not claim that neural inference is deterministic. Model outputs, remote services, and external systems may vary. The deterministic guarantee applies to the validated state-transition function when given the same canonical prior state, event, policy version, and inputs. Reproduction additionally requires pinned artifacts, tool versions, configuration, and any external responses that affect the result. An execution that cannot be reproduced is marked as such; it is not classified as reproducible.
+Neural inference is not assumed to be deterministic. Model outputs, remote services, and external systems may vary. The deterministic guarantee applies to the validated state-transition function when it receives the same canonical prior state, event, policy version, and inputs. Reproduction also requires pinned artifacts, tool versions, configuration, and all external responses that influence the result. An execution that lacks these inputs MUST NOT be classified as reproducible.
 
 ### 3.4 State-transition invariants
 
@@ -339,7 +345,7 @@ Klyn OS does not claim that neural inference is deterministic. Model outputs, re
 
 ## 4. Isolation and containment
 
-Isolation is selected by workload risk and host capability. The runtime MUST never silently replace a requested isolation profile with a weaker one.
+The runtime selects an isolation profile according to workload risk and verified host capabilities. It MUST NOT substitute a weaker profile without an explicit policy decision.
 
 > **Fail-closed rule**
 >
@@ -359,7 +365,7 @@ Isolation is selected by workload risk and host capability. The runtime MUST nev
 
 ### 4.2 Linux sandbox admission contract
 
-Before worker admission, the native runtime MUST probe the actual kernel and feature ABI required by the selected profile. Configuration intent is not proof of kernel enforcement.
+Before admitting a worker, the native runtime MUST probe the kernel and feature ABI required by the selected profile. A configuration setting alone does not demonstrate that the kernel enforced the requested control.
 
 - **Namespaces:** verify each required namespace is available and successfully applied to the worker.
 - **cgroups v2:** verify controller availability and successful placement of the worker into the configured resource domain.
@@ -369,11 +375,11 @@ Before worker admission, the native runtime MUST probe the actual kernel and fea
 - **Network:** verify deny-by-default egress and explicit destination/protocol grants.
 - **Resource limits:** verify the runtime has applied CPU, memory, process, and I/O budgets rather than merely recording requested values.
 
-If a required control is unavailable—for example, an unsupported Landlock ABI, namespace, cgroup controller, or syscall-filter capability—the workload MUST be rejected with a typed unsupported-platform or policy error. It MUST NOT run unsandboxed.
+If a required control is unavailable—for example, because the Landlock ABI, a namespace, a cgroup controller, or a syscall-filter capability is unsupported—the runtime MUST reject the workload with a typed platform or policy error. It MUST NOT execute the workload without the required isolation.
 
 ### 4.3 MicroVM boundary
 
-A microVM is a stronger isolation profile for elevated-risk or multi-tenant workloads. It MUST be described as active only when the hypervisor and guest-kernel boundary are actually running and measured. A container, namespace set, or restricted process is not a microVM.
+A microVM provides a separate guest-kernel boundary for elevated-risk or multi-tenant workloads. The runtime MUST report this profile as active only when the hypervisor and guest kernel are running and their state is measured. A container, namespace configuration, or restricted process MUST NOT be identified as a microVM.
 
 The microVM profile SHOULD bind the guest image digest, virtual hardware configuration, vCPU and memory limits, virtual device set, host/guest communication channels, and network policy to the execution record. Guest output remains untrusted and must pass the same verification and commit gates as any other worker result.
 
@@ -388,7 +394,7 @@ Fail-closed behavior is mandatory:
 5. Do not silently retry with weaker isolation.
 6. Permit a weaker profile only when policy explicitly authorizes that profile for the workload and its risk classification.
 
-An unsupported platform MUST produce a typed rejection. No execution path may bypass a required control or reinterpret an unavailable primitive as successful enforcement.
+An unsupported platform MUST produce a typed rejection. No execution path may bypass a required control or report an unavailable primitive as successfully enforced.
 
 ## 5. Security model
 
@@ -490,7 +496,7 @@ These are non-negotiable release requirements:
 
 ### 5.4 Prompt-injection and tool-execution boundary
 
-Retrieved content is untrusted, even when it comes from a repository owned by the current user. Instructions inside a file, web page, commit message, test fixture, or tool result do not become system policy.
+All retrieved content MUST be treated as untrusted, including content from repositories controlled by the current user. Instructions in files, web pages, commit messages, test fixtures, and tool results MUST NOT modify system policy.
 
 The model may propose a tool call. Before execution, the gateway and native runtime MUST validate:
 
@@ -501,7 +507,7 @@ The model may propose a tool call. Before execution, the gateway and native runt
 5. destination, file, and resource constraints;
 6. approval requirement for destructive, external, or secret-bearing operations.
 
-High-impact operations—such as publishing a release, deleting data, modifying access controls, or sending data outside the execution boundary—require an explicit policy grant and, where configured, human approval. The model cannot approve its own request. Human approval does not replace runtime authorization, capability checks, or isolation.
+High-impact operations—including release publication, data deletion, access-control changes, and external data transfer—require an explicit policy grant and human approval when the applicable policy requires it. A model MUST NOT approve its own request. Human approval does not replace runtime authorization, capability validation, or isolation.
 
 ## 6. Evidence and auditability: KEL
 
@@ -522,7 +528,7 @@ An evidence record SHOULD include:
 - verification policy, test results, exit classification, and artifact digests;
 - previous-record commitment and resulting Merkle checkpoint.
 
-Sensitive values MUST be excluded or irreversibly redacted before commitment. A digest is not a substitute for access control over the underlying artifact.
+Sensitive values MUST be excluded or irreversibly redacted before evidence is committed. A digest does not replace access control for the referenced artifact.
 
 ### 6.2 Merkle construction and proof semantics
 
@@ -533,7 +539,7 @@ KEL uses a domain-separated Merkle construction with distinct leaf and internal-
 - **Signed checkpoints:** bind a root hash and tree size to an authorized signer.
 - **Independent verification:** verify proofs without trusting the component that produced the record.
 
-The design follows the Merkle inclusion and append-only consistency concepts in [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162.html). The exact hash suite, canonical serialization, key rotation, checkpoint format, and verifier version MUST be versioned.
+The design follows the Merkle inclusion and append-only consistency model described in [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162.html). The hash suite, canonical serialization, key-rotation procedure, checkpoint format, and verifier version MUST be versioned.
 
 > **Auditability limit**
 >
@@ -586,11 +592,11 @@ A control is not satisfied by a checklist entry. Its release record MUST link to
 
 ## 8. MCP integration
 
-MCP is a protocol boundary—not a grant of trust. Klyn OS exposes only explicitly registered tools and resources. The exact endpoint URL is deployment-specific and MUST be supplied by the deployment operator; this README intentionally contains no private deployment address.
+MCP defines a protocol interface; it does not provide authentication or authorization by itself. Klyn OS exposes only explicitly registered tools and resources. The deployment operator MUST provide the endpoint URL. This README does not publish a deployment-specific endpoint.
 
 ### 8.1 Client connection contract
 
-Provide the client with:
+The client configuration MUST include:
 
 - the deployment's HTTPS MCP endpoint;
 - a short-lived bearer credential or supported OAuth flow;
@@ -598,9 +604,9 @@ Provide the client with:
 - the approved tool set;
 - the protocol version supported by both client and server.
 
-Store credentials in the client's secret store. Do not place tokens in URLs, source code, checked-in configuration, screenshots, or shell history. Require TLS; reject invalid authorization, unsupported protocol versions, malformed JSON-RPC envelopes, and tool arguments that fail schema validation.
+Store credentials in the client secret store. Tokens MUST NOT appear in URLs, source code, checked-in configuration, screenshots, or shell history. The connection MUST use TLS. The server MUST reject invalid credentials, unsupported protocol versions, malformed JSON-RPC envelopes, and arguments that fail schema validation.
 
-For Streamable HTTP, clients send JSON-RPC requests to the configured MCP endpoint using the transport and protocol version negotiated with the server. Follow the [official MCP specification](https://modelcontextprotocol.io/specification/) for initialization, capability negotiation, tool discovery, invocation, notifications, and transport behavior. Do not assume every server version supports identical session or streaming semantics.
+For Streamable HTTP, clients send JSON-RPC requests to the configured MCP endpoint using the negotiated transport and protocol version. The implementation MUST follow the [MCP specification](https://modelcontextprotocol.io/specification/) for initialization, capability negotiation, tool discovery, invocation, notifications, and transport behavior. Session and streaming semantics MUST be determined from the protocol version supported by both endpoints.
 
 > **MCP trust invariant**
 >
@@ -608,7 +614,7 @@ For Streamable HTTP, clients send JSON-RPC requests to the configured MCP endpoi
 
 ### 8.2 Tool invocation contract
 
-A tool call is accepted only after authentication, schema validation, policy evaluation, and capability checks. Tool implementations MUST:
+A tool call MUST be accepted only after authentication, schema validation, policy evaluation, and capability validation. Each tool implementation MUST:
 
 - use stable, versioned tool names and JSON schemas;
 - reject unknown fields where strict validation is required;
@@ -618,7 +624,7 @@ A tool call is accepted only after authentication, schema validation, policy eva
 - return a typed result with operation ID, state, and evidence reference;
 - return structured errors without leaking secrets or host details.
 
-The following is an illustrative response-field contract, not a claim that every tool currently emits this exact shape:
+The table below defines an illustrative response-field contract. It does not assert that every deployed tool currently returns this exact structure:
 
 | Field | Illustrative value | Meaning |
 |---|---|---|
@@ -645,7 +651,7 @@ Error messages are diagnostic; authorization decisions MUST use stable machine-r
 
 ### 8.3 Native runtime boundary
 
-Gateway-to-daemon communication MUST use an authenticated local channel with explicit peer identity and a versioned message schema (for example, JSON-RPC over a Unix domain socket). The daemon independently validates the request, capability, lease, input digest, and platform policy.
+Communication between the gateway and daemon MUST use an authenticated local channel, explicit peer identity, and a versioned message schema. JSON-RPC over a Unix domain socket is one possible transport. The daemon MUST independently validate the request, capability, lease, input digest, and platform policy.
 
 The gateway MUST NOT be able to invoke an unrestricted host shell through a generic proxy method. The daemon MUST treat all gateway-supplied paths, IDs, environment entries, tool arguments, and artifact references as untrusted until independently validated.
 
@@ -662,7 +668,7 @@ The gateway MUST NOT be able to invoke an unrestricted host shell through a gene
 
 ### 9.2 Inspect the available workspace commands
 
-The repository's package scripts and Rust workspace metadata are authoritative; do not assume a command exists simply because it appears in a tutorial.
+The package scripts and Rust workspace metadata in the checked-out revision define the available commands. Documentation or examples MUST NOT be treated as evidence that a command exists.
 
 1. Install the locked JavaScript dependencies: `pnpm install --frozen-lockfile`
 2. List declared package scripts: `pnpm run`
@@ -683,11 +689,11 @@ Configure the HTTPS endpoint and credential through the client or deployment sec
 | `KLYN_MCP_URL` | Deployment-provided MCP endpoint | Environment/secret configuration; do not hard-code |
 | `KLYN_MCP_TOKEN` | Short-lived bearer credential, when bearer authentication is enabled | Secret store only; never commit or paste into prompts |
 
-Do not commit these values. Do not paste the token into a prompt or a README. Use the deployment's published protocol and authorization configuration; endpoint path and supported protocol version are deployment-specific.
+These values MUST NOT be committed or included in prompts and documentation. Use the deployment's published protocol and authorization configuration. The endpoint path and supported protocol version are deployment-specific.
 
 ## 10. Repository and change ownership
 
-The following is a logical ownership map. It does not prescribe or assert an exact directory layout. Ownership defines accountability for an interface and enforcement responsibility; it does not prove that a subsystem is implemented, deployed, or qualified.
+This table defines logical ownership. It does not prescribe a directory layout. Ownership assigns responsibility for interfaces and enforcement; it does not establish that a subsystem is implemented, deployed, or qualified.
 
 | Area | Owns | MUST NOT own |
 |---|---|---|
@@ -699,11 +705,11 @@ The following is a logical ownership map. It does not prescribe or assert an exa
 | Verifier | Acceptance checks and proof validation | Mutating the candidate it checks |
 | KEL | Append-only evidence commitments | Plaintext credential storage |
 
-Keep privileged enforcement in the smallest reviewable native surface. Protocol adapters and orchestration code SHOULD remain replaceable without weakening the local enforcement contract. A documented subsystem name is an architectural boundary, not proof that the corresponding implementation is complete.
+Privileged enforcement SHOULD reside in the smallest reviewable native component set. Protocol adapters and orchestration services SHOULD remain replaceable without weakening local enforcement. A subsystem name identifies an architectural responsibility; it does not establish implementation completeness.
 
 ## 11. Qualification strategy
 
-A release candidate is not qualified merely because it compiles. The qualification suite SHOULD cover all of the following.
+Compilation alone does not qualify a release candidate. The qualification suite SHOULD cover the following areas.
 
 ### 11.1 Unit and property tests
 
@@ -739,13 +745,13 @@ A release candidate is not qualified merely because it compiles. The qualificati
 
 > **Qualification rule**
 >
-> Every security-sensitive test MUST fail closed. A skipped test is not a passing control. Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. An unsupported host may be suitable for development, but it cannot establish qualification for a security profile whose kernel or hypervisor requirements were not exercised.
+> Every security-sensitive test MUST fail closed. A skipped test does not pass the corresponding control. Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. An unsupported host may support development, but it cannot qualify a security profile whose kernel or hypervisor requirements were not tested.
 
 ## 12. Non-goals and honest limits
 
 > **Residual-risk statement**
 >
-> These controls reduce and constrain risk; they do not establish the absence of vulnerabilities or eliminate reliance on the host kernel, hypervisor, hardware, cryptographic key custody, dependencies, and operators.
+> These controls reduce specified risks. They do not prove the absence of vulnerabilities or remove reliance on the host kernel, hypervisor, hardware, cryptographic key custody, dependencies, or operators.
 
 - Klyn OS does not guarantee deterministic model inference or semantic correctness.
 - A Merkle commitment does not prove that recorded facts were true when captured.
@@ -756,13 +762,13 @@ A release candidate is not qualified merely because it compiles. The qualificati
 - A successful build does not prove that the runtime is secure, that a sandbox is active, or that an artifact is reproducible.
 - A design requirement does not establish implementation status; implementation status does not establish release qualification.
 
-Klyn OS specifies mechanisms for making risks explicit, bounded, observable, and testable. Residual risk remains and MUST be documented against the deployed configuration and threat model.
+Klyn OS defines mechanisms to identify, constrain, observe, and test risks. Residual risks MUST be documented for each deployed configuration and its applicable threat model.
 
 ## 13. Architectural references
 
 > **Reference status**
 >
-> External standards are design and assurance references. A citation does not prove conformance; conformance requires an implementation mapping and verification evidence for the deployed revision.
+> External standards provide design and assurance references. A citation does not establish conformance. Conformance requires an implementation mapping and verification evidence for the deployed revision.
 
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification/)
 - [RFC 9162 — Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162.html)
