@@ -40,11 +40,11 @@ Klyn OS is an autonomous software-engineering runtime. It turns engineering inte
 
 Klyn OS is **headless-first**. External clients—CLI tools, IDE integrations, CI systems, and agent clients—connect through a controlled API/MCP boundary. The native runtime owns privileged execution. TypeScript services coordinate requests; they do not bypass native security controls.
 
-The objective is not to make an agent omnipotent. It is to make every agent action **scoped, attributable, revocable, replayable where inputs permit, and rejectable when proof is incomplete**.
+Klyn OS constrains every agent action to an explicit scope and records its authorization and execution evidence. An operation is attributable, revocable, reproducible where its inputs permit, and rejectable whenever required proof is absent or invalid.
 
-> **Design horizon — “1,000 years ahead”**
+> **Project status and scope**
 >
-> This is an engineering ambition for durable interfaces and verifiable invariants—not a claim of literal technological superiority, zero risk, or completed implementation. This repository is in alpha development. The contracts below define the intended security and execution bar; a control is production-ready only when implementation, tests, and release evidence demonstrate it.
+> Klyn OS is in alpha development. This document defines architectural requirements and verification criteria. It does not assert that every specified control is implemented or qualified. Each implementation and release claim MUST be tied to an identifiable source revision, build, artifact, and supporting evidence.
 
 ### 1.1 Normative language and implementation truth
 
@@ -69,6 +69,20 @@ This README specifies required architecture and release behavior. It is not, by 
 
 Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. A security-sensitive `NOT_RUN` or `UNSUPPORTED` result is not a passing control.
 
+**Formal release predicates**
+
+Let `R` be a release candidate, `S(R)` its source revision, `A(R)` its built artifact, and `C(R)` the mandatory controls applicable to its declared platform and risk profile.
+
+- `REQUIRED(R)` means every control in `C(R)` is specified by the applicable architecture and policy.
+- `IMPLEMENTED(R)` means the enforcement code for those controls exists at `S(R)` and the implementation tests for that revision pass.
+- `QUALIFIED(R)` is true only when implementation evidence is bound to `S(R)`, the build and artifact digests are identified, required integration and adversarial tests pass, signatures and provenance verify, and every applicable platform control is demonstrated.
+
+The release predicate is:
+
+> `QUALIFIED(R) ⇔ IMPLEMENTED(R) ∧ TestsPass(R) ∧ ProvenanceValid(A(R)) ∧ SignaturesValid(A(R)) ∧ PlatformControlsEnforced(R) ∧ EvidenceBound(S(R), A(R))`.
+>
+> Any applicable mandatory control reported as `FAIL`, `UNSUPPORTED`, or `NOT_RUN` makes `QUALIFIED(R)` false. A documented exception changes the approved policy scope; it does not convert a failed control into a passing result.
+
 ### 1.2 System contract at a glance
 
 | Property | Required contract |
@@ -85,9 +99,13 @@ Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. A securit
 
 ## 2. Architecture
 
+> **Architecture invariant**
+>
+> A request crosses independent trust boundaries. No component may inherit authority merely because an upstream component accepted, transformed, or forwarded the request.
+
 ### 2.1 Control flow
 
-The following is the normative request and execution path. Each numbered stage is a trust boundary; passing a request to the next stage does not imply that the next stage trusts the caller.
+The following is the normative request and execution path. Each numbered stage is a trust boundary; passing a request to the next stage does not imply that the next stage trusts the caller. Each stage MUST validate the evidence and authority relevant to its own responsibility; upstream validation MUST NOT be treated as a substitute for local enforcement.
 
 **01 — External client**
 
@@ -228,6 +246,20 @@ A capability MUST be cryptographically authenticated and bind, at minimum:
 
 A token is necessary but not sufficient. The native runtime MUST independently validate the token, current lease, policy version, and requested resource. A valid token MUST NOT override a denied policy decision, revoked lease, unsupported isolation profile, or expired execution.
 
+**Capability validity predicate**
+
+For principal `p`, action `a`, resource `r`, capability `c`, and evaluation time `t`, `ValidCapability(c, p, a, r, t)` is true only when all of the following hold:
+
+- The capability signature and issuer trust chain verify.
+- The subject, tenant, audience, and workload identity match the authenticated execution context.
+- `a` is a member of the capability's permitted operation set.
+- `r` is within the capability's canonical resource scope.
+- Every capability constraint is satisfied.
+- The capability is within its validity interval and has not been revoked or consumed.
+- The capability's policy version and execution/lease binding match the current request.
+
+Authorization is conjunctive: a valid capability does not replace an allow decision from policy, and a policy allow decision does not replace a valid capability.
+
 > **Capability invariant**
 >
 > Authority is explicit, attenuable, audience-bound, short-lived, and checked at the enforcement point. Possession of a token never grants authority beyond its signed scope.
@@ -275,11 +307,22 @@ Terminal states are `COMMITTED`, `REJECTED`, `FAILED`, `CANCELLED`, and `EXPIRED
 >
 > A worker may produce bytes, artifacts, and proposed changes. It cannot commit them. Protected state changes only after required evidence validates and the expected version and fencing generation still match.
 
-**Determinism boundary**
+**Deterministic transition predicate and bounds**
 
-Klyn OS does not claim that neural inference is deterministic. Model outputs, remote services, and external systems may vary.
+Let `S` be a canonical prior state, `E` a validated event, and `Q` an immutable policy version. The state transition function is defined as `δ(S, E, Q) → S'`.
 
-The deterministic guarantee applies to the validated state-transition function when given the same canonical prior state, event, policy version, and inputs. Reproduction additionally requires pinned artifacts, tool versions, configuration, and any external responses that affect the result. An execution that cannot be reproduced is marked as such; it is not mislabeled deterministic.
+- `δ` MUST be a deterministic function over canonical inputs. Equal `(S, E, Q)` inputs MUST yield the same `S'`.
+- The transition function MUST validate preconditions and produce a proposed next state; it MUST NOT perform unbounded external side effects as part of state evaluation.
+- Persistence MUST use CAS against the version of `S`. A computed `S'` is not committed merely because the function returned it.
+- External effects MUST be separately authorized, bounded, and represented by idempotent or uniquely identified operations. Their outcomes MUST be recorded if they influence later state.
+
+The commit safety conditions are conjunctive:
+
+> `Commit(E) ⇒ Authorized(E) ∧ EvidenceValid(E) ∧ LeaseCurrent(E) ∧ FenceCurrent(E) ∧ CASMatches(E)`.
+>
+> `¬EvidenceValid(E) ∨ ¬LeaseCurrent(E) ∨ ¬FenceCurrent(E) ∨ ¬CASMatches(E) ⇒ ¬Commit(E)`.
+
+Klyn OS does not claim that neural inference is deterministic. Model outputs, remote services, and external systems may vary. The deterministic guarantee applies to the validated state-transition function when given the same canonical prior state, event, policy version, and inputs. Reproduction additionally requires pinned artifacts, tool versions, configuration, and any external responses that affect the result. An execution that cannot be reproduced is marked as such; it is not classified as reproducible.
 
 ### 3.4 State-transition invariants
 
@@ -345,7 +388,7 @@ Fail-closed behavior is mandatory:
 5. Do not silently retry with weaker isolation.
 6. Permit a weaker profile only when policy explicitly authorizes that profile for the workload and its risk classification.
 
-An unsupported platform is a typed outcome, not an invitation to bypass controls.
+An unsupported platform MUST produce a typed rejection. No execution path may bypass a required control or reinterpret an unavailable primitive as successful enforcement.
 
 ## 5. Security model
 
@@ -462,6 +505,10 @@ High-impact operations—such as publishing a release, deleting data, modifying 
 
 ## 6. Evidence and auditability: KEL
 
+> **Evidence invariant**
+>
+> Evidence MUST be attributable to an execution and cryptographically verifiable. Recording evidence does not authorize an operation, establish the truth of an untrusted claim, or permit a state transition.
+
 The **Klyn Evidence Ledger (KEL)** records verifiable facts about an execution without becoming a secret store.
 
 ### 6.1 Evidence record contract
@@ -493,6 +540,10 @@ The design follows the Merkle inclusion and append-only consistency concepts in 
 > A Merkle root alone does not prove that an event is truthful. Signed identities, trustworthy event capture, secure key custody, and independent verification remain necessary. KEL MUST NOT be treated as proof that a tool action was safe merely because the action has a ledger entry.
 
 ## 7. Supply-chain integrity and release gates
+
+> **Supply-chain invariant**
+>
+> A release artifact MUST be traceable to an identified source revision and build process. Unsigned, unprovenanced, or digest-mismatched artifacts MUST NOT be admitted to a trusted release channel.
 
 Klyn OS treats source, build infrastructure, dependencies, and release artifacts as part of the trusted computing base.
 
@@ -600,6 +651,10 @@ The gateway MUST NOT be able to invoke an unrestricted host shell through a gene
 
 ## 9. Quickstart
 
+> **Execution caution**
+>
+> Run repository commands only in an environment whose credentials, working directory, and host permissions are appropriate for the task. Do not place bearer tokens, private keys, or production secrets in command arguments or shell history.
+
 ### 9.1 Get the repository
 
 1. Clone the repository: `git clone https://github.com/usmanmuhd958-oss/klyn-os.git`
@@ -615,6 +670,10 @@ The repository's package scripts and Rust workspace metadata are authoritative; 
 
 Run only the build, test, lint, and qualification scripts declared by the checked-out revision. Native sandbox qualification requires a supported Linux host and the required kernel features; unsupported platforms MUST report an explicit unsupported result rather than silently running an unconfined worker.
 
+> **Quickstart boundary**
+>
+> These commands inspect and prepare the declared workspace. They do not, by themselves, establish that the native sandbox, microVM profile, production MCP endpoint, or release supply chain is qualified.
+
 ### 9.3 Connect an MCP client
 
 Configure the HTTPS endpoint and credential through the client or deployment secret manager:
@@ -628,7 +687,7 @@ Do not commit these values. Do not paste the token into a prompt or a README. Us
 
 ## 10. Repository and change ownership
 
-The following is a logical ownership map. It does not prescribe or assert an exact directory layout.
+The following is a logical ownership map. It does not prescribe or assert an exact directory layout. Ownership defines accountability for an interface and enforcement responsibility; it does not prove that a subsystem is implemented, deployed, or qualified.
 
 | Area | Owns | MUST NOT own |
 |---|---|---|
@@ -684,7 +743,11 @@ A release candidate is not qualified merely because it compiles. The qualificati
 
 ## 12. Non-goals and honest limits
 
-- Klyn OS does not promise deterministic model inference or perfect semantic correctness.
+> **Residual-risk statement**
+>
+> These controls reduce and constrain risk; they do not establish the absence of vulnerabilities or eliminate reliance on the host kernel, hypervisor, hardware, cryptographic key custody, dependencies, and operators.
+
+- Klyn OS does not guarantee deterministic model inference or semantic correctness.
 - A Merkle commitment does not prove that recorded facts were true when captured.
 - Containers and namespaces are not equivalent to a separate guest kernel.
 - Cryptographic signatures establish integrity and signer identity only to the extent that keys and identity policy are trustworthy.
@@ -693,9 +756,13 @@ A release candidate is not qualified merely because it compiles. The qualificati
 - A successful build does not prove that the runtime is secure, that a sandbox is active, or that an artifact is reproducible.
 - A design requirement does not establish implementation status; implementation status does not establish release qualification.
 
-Klyn OS aims to make risks explicit, bounded, observable, and testable—not to conceal them behind claims of autonomy.
+Klyn OS specifies mechanisms for making risks explicit, bounded, observable, and testable. Residual risk remains and MUST be documented against the deployed configuration and threat model.
 
 ## 13. Architectural references
+
+> **Reference status**
+>
+> External standards are design and assurance references. A citation does not prove conformance; conformance requires an implementation mapping and verification evidence for the deployed revision.
 
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification/)
 - [RFC 9162 — Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162.html)
@@ -710,6 +777,6 @@ Klyn OS aims to make risks explicit, bounded, observable, and testable—not to 
 
 **Klyn OS — Intent → Authorization → Isolated Execution → Verification → Evidence → State Transition.**
 
-*Headless-first. Least privilege. Fail closed. Prove before commit.*
+*Headless-first execution. Least-privilege authorization. Fail-closed admission. Evidence-gated state mutation.*
 
 </div>
