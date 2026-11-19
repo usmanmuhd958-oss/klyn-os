@@ -4,9 +4,33 @@
 
 **A headless-first, evidence-driven runtime for autonomous software engineering**
 
-**Intent → Authorization → Isolated Execution → Verification → Evidence → State Transition**
+**INTENT → AUTHORIZATION → ISOLATED EXECUTION → VERIFICATION → EVIDENCE → STATE TRANSITION**
+
+*Least privilege. Explicit boundaries. Proof before mutation.*
 
 </div>
+
+---
+
+> **THE CORE RULE**
+>
+> An agent may propose an operation. It cannot authorize itself, expand its capabilities, disable containment, or commit protected state. Policy authorizes; the native runtime enforces; the verifier evaluates; the commit gate mutates.
+
+## Document map
+
+1. [Purpose and operating principles](#1-purpose-and-operating-principles)
+2. [Architecture](#2-architecture)
+3. [Execution contract](#3-execution-contract)
+4. [Isolation and containment](#4-isolation-and-containment)
+5. [Security model](#5-security-model)
+6. [Evidence and auditability](#6-evidence-and-auditability-kel)
+7. [Supply-chain integrity](#7-supply-chain-integrity-and-release-gates)
+8. [MCP integration](#8-mcp-integration)
+9. [Quickstart](#9-quickstart)
+10. [Repository and change ownership](#10-repository-and-change-ownership)
+11. [Qualification strategy](#11-qualification-strategy)
+12. [Non-goals and honest limits](#12-non-goals-and-honest-limits)
+13. [Architectural references](#13-architectural-references)
 
 ---
 
@@ -18,20 +42,32 @@ Klyn OS is **headless-first**. External clients—CLI tools, IDE integrations, C
 
 The objective is not to make an agent omnipotent. It is to make every agent action **scoped, attributable, revocable, replayable where inputs permit, and rejectable when proof is incomplete**.
 
-> **Design horizon:** “1,000 years ahead” is an engineering ambition for durable interfaces and verifiable invariants—not a claim of literal technological superiority, zero risk, or completed implementation. This repository is in alpha development. The contracts below define the intended security and execution bar; a control is production-ready only when implementation, tests, and release evidence demonstrate it.
+> **Design horizon — “1,000 years ahead”**
+>
+> This is an engineering ambition for durable interfaces and verifiable invariants—not a claim of literal technological superiority, zero risk, or completed implementation. This repository is in alpha development. The contracts below define the intended security and execution bar; a control is production-ready only when implementation, tests, and release evidence demonstrate it.
 
 ### 1.1 Normative language and implementation truth
 
-This README is a specification of required architecture and release behavior. It is not, by itself, proof that a control exists in a particular build.
+This README specifies required architecture and release behavior. It is not, by itself, proof that a control exists in a particular build.
 
-- **MUST / MUST NOT** define a mandatory invariant. A release that violates one is not qualified.
-- **SHOULD / SHOULD NOT** define a strong default. Deviations require a documented threat analysis and an approved exception.
-- **MAY** defines an optional implementation choice that must not weaken a mandatory invariant.
-- **REQUIRED** means the architecture or release process must provide the control.
-- **IMPLEMENTED** may be claimed only when the exact source revision contains the enforcement code and the relevant tests pass.
-- **QUALIFIED** may be claimed only when the implementation evidence, integration tests, adversarial tests, and release attestations are available for the exact artifact being released.
+| Term | Exact meaning | Permitted claim |
+|---|---|---|
+| **MUST / MUST NOT** | Mandatory invariant | A release violating it is not qualified |
+| **SHOULD / SHOULD NOT** | Strong default | Deviation needs documented threat analysis and approved exception |
+| **MAY** | Optional implementation choice | It must not weaken a mandatory invariant |
+| **REQUIRED** | Architecture or release process must provide the control | Describes the target contract, not implementation status |
+| **IMPLEMENTED** | Exact source revision contains enforcement code and relevant tests pass | May be claimed only with revision-specific evidence |
+| **QUALIFIED** | Implementation evidence, integration tests, adversarial tests, and release attestations exist for the exact artifact | May be claimed only with evidence tied to that artifact |
 
-A design description, TODO, configuration placeholder, passing compile, or skipped test does not establish implementation or qualification. Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. A security-sensitive `NOT_RUN` or `UNSUPPORTED` result is not a passing control.
+> **Status logic**
+>
+> - **REQUIRED ≠ IMPLEMENTED**
+> - **IMPLEMENTED ≠ QUALIFIED**
+> - **QUALIFIED** requires verifiable evidence for the exact source revision, build, and artifact.
+>
+> A design description, TODO, configuration placeholder, successful compile, or skipped test does not establish implementation or qualification.
+
+Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. A security-sensitive `NOT_RUN` or `UNSUPPORTED` result is not a passing control.
 
 ### 1.2 System contract at a glance
 
@@ -64,7 +100,7 @@ The following is the normative request and execution path. Each numbered stage i
 
 `[ MCP / API GATEWAY ]`  
 `       |`  
-`       |  authenticate, validate, rate-limit`  
+`       |  authenticate · validate · rate-limit`  
 `       v`
 
 **03 — Identity and policy**
@@ -104,9 +140,13 @@ The following is the normative request and execution path. Each numbered stage i
 `                                      v`  
 `                                [ AUTHORITATIVE STATE ]`
 
-**Evidence path — independent of the control-flow result**
+**Evidence path — independent of control-flow result**
 
 The gateway, orchestrator, native runtime, verifier, and commit gate emit typed evidence events to the Klyn Evidence Ledger (KEL). Evidence recording MUST NOT grant authority, bypass the state machine, or expose plaintext credentials.
+
+> **Trust-boundary rule**
+>
+> A successful gateway response is not proof of execution. A successful worker exit is not proof of correctness. A passing verifier is not permission to ignore CAS. A ledger entry is not a substitute for authorization.
 
 ### 2.2 Trust boundaries and ownership
 
@@ -121,7 +161,9 @@ The gateway, orchestrator, native runtime, verifier, and commit gate emit typed 
 | Verifier | Evaluate outputs against declared acceptance criteria | Modify the candidate result it is verifying |
 | Evidence ledger | Commit tamper-evident execution records | Store plaintext secrets or silently rewrite history |
 
-**Authority invariant:** the model proposes; the policy engine authorizes; the runtime enforces; the verifier evaluates; the commit gate mutates state. No model response alone is sufficient authority for a protected operation.
+> **Authority invariant**
+>
+> The model proposes. The policy engine authorizes. The runtime enforces. The verifier evaluates. The commit gate mutates state. No model response alone is sufficient authority for a protected operation.
 
 ### 2.3 Logical subsystem map
 
@@ -144,18 +186,22 @@ The native runtime is the enforcement boundary. A gateway or orchestration servi
 
 Every request MUST be normalized into a typed operation containing:
 
-- authenticated principal and tenant;
-- target project, repository, and immutable revision;
-- declared operation and canonical resource scope;
-- input and configuration digests;
-- requested tools and network destinations;
-- time, CPU, memory, process, and storage budgets;
-- verification policy and required approvals;
-- idempotency key and expected state version.
+- **Identity:** authenticated principal and tenant.
+- **Target:** project, repository, and immutable revision.
+- **Operation:** declared action and canonical resource scope.
+- **Inputs:** input and configuration digests.
+- **Tools and network:** requested tools and network destinations.
+- **Budgets:** time, CPU, memory, process, and storage limits.
+- **Verification:** acceptance policy and required approvals.
+- **Concurrency:** idempotency key and expected state version.
 
 Free-form prompt text is untrusted input. It may describe intent, but it MUST NOT add permissions, change tenant identity, weaken policy, or authorize secret access.
 
 The authorization decision MUST be computed from authenticated identity, explicit policy, canonical resource identifiers, and the requested operation—not from claims contained in user-controlled text.
+
+> **Intent is data, not authority.**
+>
+> Neither natural-language instructions nor retrieved content can create capabilities, switch tenants, weaken a policy, or approve their own execution.
 
 ### 3.2 Least-privilege capability tokens: OCap
 
@@ -163,12 +209,12 @@ The object-capability contract (**OCap**) grants authority over a specific actio
 
 A capability MUST be cryptographically authenticated and bind, at minimum:
 
-- issuer, subject, audience, tenant, and workload identity;
-- allowed operation set and canonical resource scope;
-- constraints such as byte limits, destination allowlist, permitted paths, and operation count;
-- issue time, expiry, unique token identifier, and policy version/digest;
-- delegation rules, including maximum depth and attenuated child scopes;
-- execution or lease binding where supported.
+- **Identity:** issuer, subject, audience, tenant, and workload identity.
+- **Authority:** allowed operation set and canonical resource scope.
+- **Constraints:** byte limits, destination allowlist, permitted paths, and operation count.
+- **Validity:** issue time, expiry, unique token identifier, and policy version/digest.
+- **Delegation:** maximum depth and attenuated child scopes.
+- **Execution binding:** execution or lease binding where supported.
 
 **Mandatory enforcement rules**
 
@@ -182,11 +228,23 @@ A capability MUST be cryptographically authenticated and bind, at minimum:
 
 A token is necessary but not sufficient. The native runtime MUST independently validate the token, current lease, policy version, and requested resource. A valid token MUST NOT override a denied policy decision, revoked lease, unsupported isolation profile, or expired execution.
 
+> **Capability invariant**
+>
+> Authority is explicit, attenuable, audience-bound, short-lived, and checked at the enforcement point. Possession of a token never grants authority beyond its signed scope.
+
 ### 3.3 Runtime lease and deterministic state transitions
 
-`RuntimeLeaseV1` is the bounded execution grant. It binds a worker to an execution ID, immutable input snapshot, policy digest, capability set, resource budget, expiry, and fencing generation.
+`RuntimeLeaseV1` is the bounded execution grant. It binds a worker to:
 
-The authoritative state machine is event-driven. State transitions are governed by the following hierarchy:
+- execution ID;
+- immutable input snapshot;
+- policy digest;
+- capability set;
+- resource budget;
+- expiry;
+- fencing generation.
+
+The authoritative state machine is event-driven. State transitions are governed by this hierarchy:
 
 1. **QUEUED — request admitted to the control plane**
    - **AUTHORIZED — policy decision allows the exact principal, operation, and resource.**
@@ -205,15 +263,23 @@ Terminal states are `COMMITTED`, `REJECTED`, `FAILED`, `CANCELLED`, and `EXPIRED
 
 **Transition guarantees**
 
-- Each transition has a typed event, a precondition, an expected version, and an auditable result.
-- State writes use compare-and-swap against the expected version. A stale worker cannot overwrite a newer state.
-- A monotonically increasing fencing generation invalidates prior workers after lease replacement, cancellation, or expiry.
-- Repeated requests with the same idempotency key resolve to the same logical operation; conflicting payloads are rejected.
-- A worker result is a candidate, not a commit. Only the verifier and commit gate authorize a protected mutation.
-- Failure, timeout, cancellation, or incomplete evidence leaves protected state unchanged.
-- Cancellation is not complete merely because the control plane recorded a request; the runtime MUST fence the worker and reject subsequent writes from its generation.
+- **Typed transitions:** each transition has a typed event, a precondition, an expected version, and an auditable result.
+- **Compare-and-swap:** state writes use CAS against the expected version. A stale worker cannot overwrite a newer state.
+- **Fencing:** a monotonically increasing fencing generation invalidates prior workers after lease replacement, cancellation, or expiry.
+- **Idempotency:** repeated requests with the same idempotency key resolve to the same logical operation; conflicting payloads are rejected.
+- **Candidate versus commit:** a worker result is a candidate, not a commit. Only the verifier and commit gate authorize a protected mutation.
+- **Failure atomicity:** failure, timeout, cancellation, or incomplete evidence leaves protected state unchanged.
+- **Effective cancellation:** cancellation is not complete merely because the control plane recorded a request; the runtime MUST fence the worker and reject subsequent writes from its generation.
 
-**Determinism boundary:** Klyn OS does not claim that neural inference is deterministic. Model outputs, remote services, and external systems may vary. The deterministic guarantee applies to the validated state-transition function when given the same canonical prior state, event, policy version, and inputs. Reproduction additionally requires pinned artifacts, tool versions, configuration, and any external responses that affect the result. An execution that cannot be reproduced is marked as such; it is not mislabeled deterministic.
+> **Commit invariant**
+>
+> A worker may produce bytes, artifacts, and proposed changes. It cannot commit them. Protected state changes only after required evidence validates and the expected version and fencing generation still match.
+
+**Determinism boundary**
+
+Klyn OS does not claim that neural inference is deterministic. Model outputs, remote services, and external systems may vary.
+
+The deterministic guarantee applies to the validated state-transition function when given the same canonical prior state, event, policy version, and inputs. Reproduction additionally requires pinned artifacts, tool versions, configuration, and any external responses that affect the result. An execution that cannot be reproduced is marked as such; it is not mislabeled deterministic.
 
 ### 3.4 State-transition invariants
 
@@ -231,6 +297,10 @@ Terminal states are `COMMITTED`, `REJECTED`, `FAILED`, `CANCELLED`, and `EXPIRED
 ## 4. Isolation and containment
 
 Isolation is selected by workload risk and host capability. The runtime MUST never silently replace a requested isolation profile with a weaker one.
+
+> **Fail-closed rule**
+>
+> If a required isolation primitive is unavailable or cannot be verified, the worker is not admitted under that profile. It MUST NOT silently execute without the requested confinement.
 
 ### 4.1 Containment matrix
 
@@ -294,20 +364,71 @@ These are non-negotiable release requirements:
 9. **Tamper-evident history:** committed evidence is append-only and cryptographically verifiable.
 10. **Fail closed:** missing controls, malformed proofs, ambiguous identity, and unsupported platforms produce rejection—not a permissive fallback.
 
+> **Non-negotiable security property**
+>
+> No untrusted input may directly expand authority. No stale worker may commit. No unverified result may mutate protected state. No missing isolation primitive may be treated as success.
+
 ### 5.2 Threat and hardening matrix
 
-| Threat | Attack path | Required mitigation | Release evidence |
-|---|---|---|---|
-| Prompt injection | Malicious instructions embedded in code, docs, web pages, or tool output | Treat retrieved content as data; separate policy from model context; require explicit capability for each tool | Adversarial injection tests show no privilege expansion |
-| Tool abuse | Agent invokes a dangerous or out-of-scope tool | Typed tool schemas, per-tool authorization, resource scope, approval gates, bounded execution | Deny tests for unauthorized action/resource combinations |
-| Worker escape | Malicious build/test code attacks host kernel or runtime | Namespaces, seccomp, Landlock, cgroups; microVM for elevated-risk workloads | Hostile workload tests, escape regression tests, isolation telemetry |
-| Secret exfiltration | Prompt or process attempts to read or transmit credentials | Secret broker, short-lived scoped handles, egress deny-by-default, output redaction | Canary-secret tests, network policy tests, log scans |
-| Cross-tenant access | Forged IDs or confused-deputy request crosses tenant boundary | Derive identity from authenticated context; verify tenant/resource binding at every layer | Negative authorization matrix and isolation tests |
-| Stale worker / race | Expired worker writes after retry or cancellation | Lease expiry, fencing generation, state-version CAS | Concurrent transition and stale-fence tests |
-| Artifact substitution | Build output or dependency replaced after review | Digest-pinned inputs, signed provenance, artifact signature verification | Provenance verification and digest mismatch tests |
-| Evidence tampering | Attacker rewrites or truncates execution history | Append-only Merkle commitments, signed checkpoints, inclusion and consistency proofs | Proof verification and tamper-detection tests |
-| Resource exhaustion | Fork bomb, memory growth, disk fill, infinite task | cgroups, quotas, wall-clock deadlines, bounded queues, admission control | Stress tests and enforced limit assertions |
-| Supply-chain compromise | Dependency, build action, runner, or release artifact altered | Pinned dependencies/actions, protected builds, provenance, signing, reproducible rebuilds | SBOM, provenance, signature, and independent rebuild checks |
+**Prompt injection**
+
+- **Attack path:** malicious instructions embedded in code, documentation, web pages, or tool output.
+- **Required controls:** treat retrieved content as data; separate policy from model context; require explicit capability for each tool.
+- **Release evidence:** adversarial injection tests show no privilege expansion.
+
+**Tool abuse**
+
+- **Attack path:** an agent invokes a dangerous or out-of-scope tool.
+- **Required controls:** typed tool schemas, per-tool authorization, resource scope, approval gates, and bounded execution.
+- **Release evidence:** deny tests for unauthorized action/resource combinations.
+
+**Worker escape**
+
+- **Attack path:** malicious build or test code attacks the host kernel or runtime.
+- **Required controls:** namespaces, seccomp, Landlock, cgroups, and microVM isolation for elevated-risk workloads.
+- **Release evidence:** hostile workload tests, escape regression tests, and isolation telemetry.
+
+**Secret exfiltration**
+
+- **Attack path:** a prompt or process attempts to read or transmit credentials.
+- **Required controls:** secret broker, short-lived scoped handles, egress deny-by-default, and output redaction.
+- **Release evidence:** canary-secret tests, network policy tests, and log scans.
+
+**Cross-tenant access**
+
+- **Attack path:** forged identifiers or a confused-deputy request crosses tenant boundaries.
+- **Required controls:** derive identity from authenticated context; verify tenant/resource binding at every layer.
+- **Release evidence:** negative authorization matrix and isolation tests.
+
+**Stale worker / race**
+
+- **Attack path:** an expired worker writes after retry or cancellation.
+- **Required controls:** lease expiry, fencing generation, and state-version CAS.
+- **Release evidence:** concurrent transition tests and stale-fence tests.
+
+**Artifact substitution**
+
+- **Attack path:** build output or a dependency is replaced after review.
+- **Required controls:** digest-pinned inputs, signed provenance, and artifact signature verification.
+- **Release evidence:** provenance verification and digest-mismatch tests.
+
+**Evidence tampering**
+
+- **Attack path:** an attacker rewrites or truncates execution history.
+- **Required controls:** append-only Merkle commitments, signed checkpoints, inclusion proofs, and consistency proofs.
+- **Release evidence:** proof verification and tamper-detection tests.
+
+**Resource exhaustion**
+
+- **Attack path:** fork bomb, memory growth, disk fill, or infinite task.
+- **Required controls:** cgroups, quotas, wall-clock deadlines, bounded queues, and admission control.
+- **Release evidence:** stress tests and enforced limit assertions.
+
+**Supply-chain compromise**
+
+- **Attack path:** dependency, build action, runner, or release artifact is altered.
+- **Required controls:** pinned dependencies/actions, protected builds, provenance, signing, and reproducible rebuilds.
+- **Release evidence:** SBOM, provenance, signature, and independent rebuild checks.
 
 ### 5.3 Secret handling
 
@@ -319,6 +440,10 @@ These are non-negotiable release requirements:
 - Rotate credentials after suspected exposure and invalidate affected leases.
 - Treat environment variables as potentially observable by same-privilege processes and diagnostic tooling.
 - Never use a README, issue, commit message, tool response, or model context as a credential transport.
+
+> **Secret invariant**
+>
+> Secret values do not belong in prompts, logs, artifacts, source control, KEL records, or tool output. Record references and access decisions—not the credential material.
 
 ### 5.4 Prompt-injection and tool-execution boundary
 
@@ -363,7 +488,9 @@ KEL uses a domain-separated Merkle construction with distinct leaf and internal-
 
 The design follows the Merkle inclusion and append-only consistency concepts in [RFC 9162](https://www.rfc-editor.org/rfc/rfc9162.html). The exact hash suite, canonical serialization, key rotation, checkpoint format, and verifier version MUST be versioned.
 
-A Merkle root alone does not prove that an event is truthful. Signed identities, trustworthy event capture, secure key custody, and independent verification remain necessary. KEL MUST NOT be treated as proof that a tool action was safe merely because the action has a ledger entry.
+> **Auditability limit**
+>
+> A Merkle root alone does not prove that an event is truthful. Signed identities, trustworthy event capture, secure key custody, and independent verification remain necessary. KEL MUST NOT be treated as proof that a tool action was safe merely because the action has a ledger entry.
 
 ## 7. Supply-chain integrity and release gates
 
@@ -371,16 +498,16 @@ Klyn OS treats source, build infrastructure, dependencies, and release artifacts
 
 ### 7.1 Required release controls
 
-- Protect the default branch; require reviewed changes and status checks for privileged code.
-- Sign commits and release tags; verify signer identity and signature policy in CI.
-- Pin third-party CI actions and build tools to immutable revisions.
-- Lock dependencies; record resolved dependency digests and produce an SBOM (SPDX or CycloneDX).
-- Generate SLSA-compatible build provenance identifying source revision, builder, build definition, resolved dependencies, and artifact subjects.
-- Sign artifacts and attestations; verify them before deployment or execution.
-- Rebuild from the same declared inputs in an isolated environment and compare artifact digests where reproducibility is claimed.
-- Reject unsigned, unprovenanced, or digest-mismatched production artifacts.
+- **Protected source:** protect the default branch; require reviewed changes and status checks for privileged code.
+- **Signed source:** sign commits and release tags; verify signer identity and signature policy in CI.
+- **Pinned build:** pin third-party CI actions and build tools to immutable revisions.
+- **Locked dependencies:** record resolved dependency digests and produce an SBOM (SPDX or CycloneDX).
+- **Build provenance:** generate SLSA-compatible provenance identifying source revision, builder, build definition, resolved dependencies, and artifact subjects.
+- **Artifact signatures:** sign artifacts and attestations; verify them before deployment or execution.
+- **Reproducibility:** rebuild from the same declared inputs in an isolated environment and compare artifact digests where reproducibility is claimed.
+- **Fail closed:** reject unsigned, unprovenanced, or digest-mismatched production artifacts.
 
-Relevant baselines:
+**Reference baselines**
 
 - [SLSA build tracks](https://slsa.dev/spec/v1.0/levels)
 - [SLSA provenance](https://slsa.dev/spec/v1.1/provenance)
@@ -402,7 +529,9 @@ A control is not satisfied by a checklist entry. Its release record MUST link to
 | Qualified sandbox | Host/kernel capability report and successful enforcement tests for the exact profile |
 | Qualified release | All mandatory gates passed for the exact source and artifact digests |
 
-Do not advertise a SLSA level, signed-build guarantee, or reproducibility guarantee until the corresponding requirements are independently met.
+> **Release-claim invariant**
+>
+> Do not advertise a SLSA level, signed-build guarantee, or reproducibility guarantee until the corresponding requirements are independently met and linked to the exact artifact being released.
 
 ## 8. MCP integration
 
@@ -421,6 +550,10 @@ Provide the client with:
 Store credentials in the client's secret store. Do not place tokens in URLs, source code, checked-in configuration, screenshots, or shell history. Require TLS; reject invalid authorization, unsupported protocol versions, malformed JSON-RPC envelopes, and tool arguments that fail schema validation.
 
 For Streamable HTTP, clients send JSON-RPC requests to the configured MCP endpoint using the transport and protocol version negotiated with the server. Follow the [official MCP specification](https://modelcontextprotocol.io/specification/) for initialization, capability negotiation, tool discovery, invocation, notifications, and transport behavior. Do not assume every server version supports identical session or streaming semantics.
+
+> **MCP trust invariant**
+>
+> MCP standardizes the protocol exchange. It does not confer authority. Authentication, tenant scoping, tool authorization, resource checks, and native runtime enforcement remain Klyn OS responsibilities.
 
 ### 8.2 Tool invocation contract
 
@@ -444,7 +577,7 @@ The following is an illustrative response-field contract, not a claim that every
 | `evidence.record_id` | `kel_…` | Reference to the evidence record |
 | `evidence.checkpoint` | `sha256:…` | Digest identifying the checkpoint |
 
-Suggested machine-readable error classes:
+**Suggested machine-readable error classes**
 
 - `UNAUTHENTICATED`
 - `FORBIDDEN`
@@ -545,7 +678,9 @@ A release candidate is not qualified merely because it compiles. The qualificati
 - Signature verification, SBOM validation, provenance verification, and reproducible-build checks.
 - Digest-mismatch, untrusted-signer, expired-identity, and malformed-attestation negative tests.
 
-Every security-sensitive test MUST fail closed: a skipped test is not a passing control. Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. An unsupported host may be suitable for development, but it cannot establish qualification for a security profile whose kernel or hypervisor requirements were not exercised.
+> **Qualification rule**
+>
+> Every security-sensitive test MUST fail closed. A skipped test is not a passing control. Reports MUST distinguish `PASS`, `FAIL`, `UNSUPPORTED`, and `NOT_RUN`. An unsupported host may be suitable for development, but it cannot establish qualification for a security profile whose kernel or hypervisor requirements were not exercised.
 
 ## 12. Non-goals and honest limits
 
