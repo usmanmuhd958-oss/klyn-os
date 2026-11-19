@@ -29,6 +29,7 @@
 9. [Quickstart](#9-quickstart)
 10. [Repository and change ownership](#10-repository-and-change-ownership)
 11. [Qualification strategy](#11-qualification-strategy)
+    - [Architecture and security comparison](docs/ARCHITECTURE_COMPARISON.md)
 12. [Non-goals and honest limits](#12-non-goals-and-honest-limits)
 13. [Architectural references](#13-architectural-references)
 
@@ -770,6 +771,7 @@ Klyn OS defines mechanisms to identify, constrain, observe, and test risks. Resi
 >
 > External standards provide design and assurance references. A citation does not establish conformance. Conformance requires an implementation mapping and verification evidence for the deployed revision.
 
+- [Klyn OS architecture and security comparison](docs/ARCHITECTURE_COMPARISON.md)
 - [Model Context Protocol specification](https://modelcontextprotocol.io/specification/)
 - [RFC 9162 — Certificate Transparency Version 2.0](https://www.rfc-editor.org/rfc/rfc9162.html)
 - [SLSA build track](https://slsa.dev/spec/v1.0/levels)
